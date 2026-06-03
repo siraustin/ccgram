@@ -416,7 +416,7 @@ def _json_hook_status(path: Path, provider_name: str, events: tuple[str, ...]) -
     return 1
 
 
-def _install_hook(provider_name: str = "claude") -> int:  # noqa: PLR0912
+def _install_hook(provider_name: str = "claude") -> int:  # noqa: PLR0911, PLR0912
     """Install ccgram hooks for all event types into provider settings.
 
     Returns 0 on success, 1 on error.
@@ -426,6 +426,9 @@ def _install_hook(provider_name: str = "claude") -> int:  # noqa: PLR0912
             return _install_codex_hook()
         case "gemini":
             return _install_gemini_hook()
+        case "grok":
+            print("Grok uses hookless transcript discovery; nothing to install.")
+            return 0
         case "pi":
             print(
                 "Pi hooks are provided by the hook-runner extension; nothing to install."
@@ -528,6 +531,9 @@ def _uninstall_hook(provider_name: str = "claude") -> int:  # noqa: PLR0911
             return _uninstall_json_hooks(_codex_hooks_file(), "codex")
         case "gemini":
             return _uninstall_json_hooks(_gemini_settings_file(), "gemini")
+        case "grok":
+            print("Grok uses hookless transcript discovery; nothing to uninstall.")
+            return 0
         case "pi":
             print(
                 "Pi hooks are managed by the hook-runner extension; nothing to uninstall."
@@ -606,6 +612,9 @@ def _hook_status(provider_name: str = "claude") -> int:  # noqa: PLR0911
             return _json_hook_status(
                 _gemini_settings_file(), "gemini", _GEMINI_HOOK_EVENTS
             )
+        case "grok":
+            print("Grok uses hookless transcript discovery; no hooks required.")
+            return 0
         case "pi":
             print("Pi hook status depends on the hook-runner extension.")
             print(

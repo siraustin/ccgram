@@ -15,6 +15,7 @@ from ccgram.providers._jsonl import JsonlProvider
 from ccgram.providers.claude import ClaudeProvider
 from ccgram.providers.codex import CodexProvider
 from ccgram.providers.gemini import GeminiProvider
+from ccgram.providers.grok import GrokProvider
 from ccgram.providers.pi import PiProvider
 from ccgram.providers.shell import ShellProvider
 
@@ -49,6 +50,7 @@ PROVIDER_FIXTURES: list[type] = [
     ClaudeProvider,
     CodexProvider,
     GeminiProvider,
+    GrokProvider,
     PiProvider,
     ShellProvider,
 ]
@@ -134,6 +136,15 @@ def _make_assistant_entry(
         }
     if name == "gemini":
         return {"type": "gemini", "content": text}
+    if name == "grok":
+        return {
+            "params": {
+                "update": {
+                    "sessionUpdate": "agent_message_chunk",
+                    "content": {"type": "text", "text": text},
+                }
+            }
+        }
     return {
         "type": "assistant",
         "message": {"content": [{"type": "text", "text": text}]},
@@ -157,6 +168,17 @@ def _make_tool_use_entry(provider: AgentProvider) -> dict[str, Any]:
             "type": "gemini",
             "content": "Using tool",
             "toolCalls": [{"id": "t1", "name": "Read"}],
+        }
+    if name == "grok":
+        return {
+            "params": {
+                "update": {
+                    "sessionUpdate": "tool_call",
+                    "toolCallId": "t1",
+                    "title": "Read",
+                    "rawInput": {"path": "foo.py"},
+                }
+            }
         }
     if name == "pi":
         return {
@@ -193,6 +215,17 @@ def _make_tool_result_entry(provider: AgentProvider) -> dict[str, Any]:
         }
     if name == "gemini":
         return {"type": "gemini", "content": "result ok"}
+    if name == "grok":
+        return {
+            "params": {
+                "update": {
+                    "sessionUpdate": "tool_call_update",
+                    "toolCallId": "t1",
+                    "status": "completed",
+                    "rawOutput": {"output_for_prompt": "ok"},
+                }
+            }
+        }
     if name == "pi":
         return {
             "type": "toolResult",
@@ -302,6 +335,8 @@ class TestIsUserTranscriptEntry:
             entry = {"type": "input_item", "payload": {"role": "user"}}
         elif name == "gemini":
             entry = {"type": "user"}
+        elif name == "grok":
+            entry = {"params": {"update": {"sessionUpdate": "user_message_chunk"}}}
         else:
             entry = {"type": "user"}
         assert provider.is_user_transcript_entry(entry) is True
@@ -312,6 +347,8 @@ class TestIsUserTranscriptEntry:
             entry = {"type": "response_item", "payload": {"role": "assistant"}}
         elif name == "gemini":
             entry = {"type": "gemini"}
+        elif name == "grok":
+            entry = {"params": {"update": {"sessionUpdate": "agent_message_chunk"}}}
         else:
             entry = {"type": "assistant"}
         assert provider.is_user_transcript_entry(entry) is False
@@ -345,6 +382,15 @@ class TestParseHistoryEntry:
             }
         elif name == "gemini":
             entry = {"type": "user", "content": "my question"}
+        elif name == "grok":
+            entry = {
+                "params": {
+                    "update": {
+                        "sessionUpdate": "user_message_chunk",
+                        "content": {"type": "text", "text": "my question"},
+                    }
+                }
+            }
         else:
             entry = {
                 "type": "user",
@@ -365,6 +411,15 @@ class TestParseHistoryEntry:
             }
         elif name == "gemini":
             entry = {"type": "gemini", "content": ""}
+        elif name == "grok":
+            entry = {
+                "params": {
+                    "update": {
+                        "sessionUpdate": "agent_message_chunk",
+                        "content": {"type": "text", "text": ""},
+                    }
+                }
+            }
         else:
             entry = {"type": "assistant", "message": {"content": []}}
         assert provider.parse_history_entry(entry) is None
