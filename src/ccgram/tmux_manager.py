@@ -20,6 +20,7 @@ import contextlib
 import re
 import structlog
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -79,6 +80,27 @@ _TmuxError = (
     LibTmuxException,
     OSError,
     subprocess.CalledProcessError,
+)
+
+_INTERACTIVE_SHELLS = {
+    "bash",
+    "zsh",
+    "sh",
+    "fish",
+    "dash",
+    "ksh",
+    "tcsh",
+    "csh",
+}
+_SHELL_STARTUP_TIMEOUT_SECONDS = 8.0
+_SHELL_STARTUP_PROMPT_STABLE_SECONDS = 0.2
+_SHELL_STARTUP_FALLBACK_STABLE_SECONDS = 2.0
+_SHELL_STARTUP_POLL_SECONDS = 0.1
+_SHELL_PROMPT_SUFFIXES = ("$", "#", "%", ">", "❯", "❱")
+_BUSY_STARTUP_MARKERS = (
+    "checking for updates",
+    "updating",
+    "installing",
 )
 
 
@@ -819,6 +841,74 @@ class TmuxManager:
             cmd = f"{cmd} {agent_args}"
         pane.send_keys(cmd, enter=True, literal=True)
 
+    @staticmethod
+    def _pane_command_basename(pane: libtmux.Pane) -> str:
+        command = pane.pane_current_command or ""
+        first = command.strip().split(maxsplit=1)[0] if command.strip() else ""
+        return Path(first).name.lstrip("-").lower()
+
+    @staticmethod
+    def _capture_pane_text_sync(pane: libtmux.Pane) -> str:
+        try:
+            lines = pane.capture_pane()
+        except _TmuxError:
+            return ""
+        return "\n".join(lines) if isinstance(lines, list) else str(lines)
+
+    @staticmethod
+    def _looks_like_shell_prompt(text: str) -> bool:
+        for line in reversed(text.splitlines()):
+            stripped = line.strip()
+            if stripped:
+                return stripped.endswith(_SHELL_PROMPT_SUFFIXES)
+        return False
+
+    @staticmethod
+    def _has_busy_startup_marker(text: str) -> bool:
+        tail = "\n".join(text.lower().splitlines()[-5:])
+        return any(marker in tail for marker in _BUSY_STARTUP_MARKERS)
+
+    @staticmethod
+    def _wait_for_interactive_shell_ready(pane: libtmux.Pane) -> None:
+        """Wait until shell startup is ready to receive typed commands.
+
+        New tmux windows start an interactive shell first.  If ccgram sends the
+        agent command while slow shell init hooks are still running, that queued
+        input can be discarded or interleaved before the prompt is live.
+        """
+        deadline = time.monotonic() + _SHELL_STARTUP_TIMEOUT_SECONDS
+        last_text: str | None = None
+        stable_since: float | None = None
+
+        while time.monotonic() < deadline:
+            command = TmuxManager._pane_command_basename(pane)
+            text = TmuxManager._capture_pane_text_sync(pane)
+            now = time.monotonic()
+
+            if command in _INTERACTIVE_SHELLS:
+                if text != last_text:
+                    last_text = text
+                    stable_since = now
+                elif stable_since is not None:
+                    stable_for = now - stable_since
+                    if (
+                        TmuxManager._looks_like_shell_prompt(text)
+                        and stable_for >= _SHELL_STARTUP_PROMPT_STABLE_SECONDS
+                    ):
+                        return
+                    if (
+                        stable_for >= _SHELL_STARTUP_FALLBACK_STABLE_SECONDS
+                        and not TmuxManager._has_busy_startup_marker(text)
+                    ):
+                        return
+            else:
+                last_text = text
+                stable_since = None
+
+            time.sleep(_SHELL_STARTUP_POLL_SECONDS)
+
+        logger.debug("Timed out waiting for shell startup readiness")
+
     async def create_window(
         self,
         work_dir: str,
@@ -869,6 +959,9 @@ class TmuxManager:
 
                 new_window_id = window.window_id or ""
                 pane = window.active_pane
+
+                if pane:
+                    self._wait_for_interactive_shell_ready(pane)
 
                 # Disable interactive editors — Telegram users can't see
                 # tmux popups or terminal overlays opened by plugins

@@ -247,6 +247,7 @@ async def detect_provider_from_pane(
         if not cmd:
             return ""
         basename = os.path.basename(cmd.split()[0])
+        # Lazy: shell provider is only needed for shell-wrapper detection.
         from .shell import KNOWN_SHELLS
 
         if (
