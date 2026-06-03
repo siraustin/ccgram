@@ -34,6 +34,7 @@ class TestBuildProviderPicker:
         assert any("Claude" in label for label in labels)
         assert any("Codex" in label for label in labels)
         assert any("Gemini" in label for label in labels)
+        assert any("Grok" in label for label in labels)
         assert any("Pi" in label for label in labels)
         assert any("Shell" in label for label in labels)
 
@@ -58,6 +59,7 @@ class TestBuildProviderPicker:
         assert f"{CB_PROV_SELECT}claude" in provider_callbacks
         assert f"{CB_PROV_SELECT}codex" in provider_callbacks
         assert f"{CB_PROV_SELECT}gemini" in provider_callbacks
+        assert f"{CB_PROV_SELECT}grok" in provider_callbacks
         assert f"{CB_PROV_SELECT}pi" in provider_callbacks
         assert f"{CB_PROV_SELECT}shell" in provider_callbacks
 

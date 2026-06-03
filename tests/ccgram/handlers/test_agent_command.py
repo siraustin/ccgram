@@ -102,6 +102,7 @@ async def test_bare_command_shows_picker():
     keyboard = getattr(markup, "inline_keyboard")  # noqa: B009
     callbacks = [b.callback_data for row in keyboard for b in row]
     assert any(c.startswith(CB_AGENT_SET) for c in callbacks)
+    assert any(c == f"{CB_AGENT_SET}@7:grok" for c in callbacks)
     assert any(c == f"{CB_AGENT_SET}@7:shell" for c in callbacks)
     assert any(c == f"{CB_AGENT_SET}@7:auto" for c in callbacks)
     assert any(c == f"{CB_AGENT_CANCEL}@7" for c in callbacks)
