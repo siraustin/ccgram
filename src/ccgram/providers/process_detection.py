@@ -1,7 +1,8 @@
 """Foreground process detection for tmux panes via ``ps -t``.
 
-All supported CLIs (claude, codex, gemini) are Node.js scripts — tmux's
-``pane_current_command`` shows ``bun`` or ``node`` instead of the CLI name.
+Some supported CLIs run through Node.js or shell wrappers, so tmux's
+``pane_current_command`` can show ``bun``, ``node``, or ``bash`` instead of the
+CLI name.
 This module inspects the actual foreground process group on the pane's TTY
 to reliably identify which provider is running.
 
@@ -41,6 +42,7 @@ _PROVIDER_BASENAMES: tuple[tuple[frozenset[str], str], ...] = (
     (frozenset({"claude", "ce", "cc-mirror", "zai"}), "claude"),
     (frozenset({"codex"}), "codex"),
     (frozenset({"gemini"}), "gemini"),
+    (frozenset({"grok"}), "grok"),
     (frozenset({"pi"}), "pi"),
 )
 
@@ -84,18 +86,27 @@ def classify_provider_from_args(args: str) -> str:
     Skips wrapper tokens (``node``, ``bun``, ``sudo``, …) and matches the
     first meaningful token against known provider names or path markers.
     Returns provider name (``"claude"``, ``"codex"``, ``"gemini"``,
-    ``"shell"``) or empty string if unrecognised.
+    ``"grok"``, ``"shell"``) or empty string if unrecognised.
     """
     if not args:
         return ""
 
+    shell_candidate = ""
     for token in args.split():
         cleaned = os.path.basename(token).lower().lstrip("-")
         if cleaned in _WRAPPER_TOKENS:
             continue
-        return _match_token(token)
+        matched = _match_token(token)
+        if matched == "shell":
+            shell_candidate = "shell"
+            continue
+        if matched:
+            return matched
+        if shell_candidate:
+            continue
+        return ""
 
-    return ""
+    return shell_candidate
 
 
 async def _run_ps(tty_path: str) -> bytes | None:

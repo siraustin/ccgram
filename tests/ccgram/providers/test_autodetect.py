@@ -5,6 +5,7 @@ import pytest
 from ccgram.providers import (
     _reset_provider,
     detect_provider_from_command,
+    detect_provider_from_pane,
     detect_provider_from_runtime,
     should_probe_pane_title_for_provider_detection,
 )
@@ -52,6 +53,36 @@ class TestDetectProviderFromCommand:
 
     def test_priority_order_first_match(self) -> None:
         assert detect_provider_from_command("claude-codex") == "claude"
+
+    @patch(
+        "ccgram.providers.process_detection.detect_provider_cached",
+        new_callable=AsyncMock,
+        return_value="grok",
+    )
+    async def test_shell_wrapper_uses_tty_detection(self, mock_detect: MagicMock):
+        detected = await detect_provider_from_pane(
+            "bash",
+            pane_tty="/dev/ttys012",
+            window_id="@17",
+        )
+
+        assert detected == "grok"
+        mock_detect.assert_awaited_once_with("@17", "/dev/ttys012")
+
+    @patch(
+        "ccgram.providers.process_detection.detect_provider_cached",
+        new_callable=AsyncMock,
+        return_value="shell",
+    )
+    async def test_shell_wrapper_falls_back_to_shell(self, mock_detect: MagicMock):
+        detected = await detect_provider_from_pane(
+            "bash",
+            pane_tty="/dev/ttys012",
+            window_id="@17",
+        )
+
+        assert detected == "shell"
+        mock_detect.assert_awaited_once_with("@17", "/dev/ttys012")
 
 
 class TestDetectProviderFromRuntime:

@@ -235,11 +235,11 @@ async def detect_provider_from_pane(
     """Detect provider using fast path + ps-based TTY detection.
 
     1. Fast path: basename match via ``detect_provider_from_command()``
-    2. If command is a JS runtime (node/bun/npx) and tty is available,
+    2. If command is a JS runtime or shell wrapper and tty is available,
        fall back to ``ps -t`` foreground process inspection with PGID cache.
     """
     detected = detect_provider_from_command(pane_current_command)
-    if detected:
+    if detected and detected != "shell":
         return detected
 
     if pane_tty and pane_current_command:
@@ -247,14 +247,23 @@ async def detect_provider_from_pane(
         if not cmd:
             return ""
         basename = os.path.basename(cmd.split()[0])
-        if basename in JS_RUNTIMES:
+        from .shell import KNOWN_SHELLS
+
+        if (
+            basename in JS_RUNTIMES
+            or basename in KNOWN_SHELLS
+            or basename.lstrip("-") in KNOWN_SHELLS
+        ):
             # Lazy: process_detection forks `ps` subprocesses; only worth
-            # loading when the pane command is a JS runtime wrapper.
+            # loading when the pane command is a runtime or shell wrapper.
             from .process_detection import detect_provider_cached
 
-            detected = await detect_provider_cached(window_id or "", pane_tty)
-            if detected:
-                return detected
+            tty_detected = await detect_provider_cached(window_id or "", pane_tty)
+            if tty_detected and tty_detected != "shell":
+                return tty_detected
+
+    if detected:
+        return detected
 
     return ""
 

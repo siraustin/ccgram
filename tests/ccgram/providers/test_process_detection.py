@@ -31,6 +31,11 @@ class TestClassifyProviderFromArgs:
             ("bun /Users/x/.bun/bin/gemini", "gemini"),
             ("node /path/to/gemini-cli/dist/index.js", "gemini"),
             ("gemini", "gemini"),
+            ("grok --no-alt-screen", "grok"),
+            (
+                "bash -c cd /Users/austin/dev/feral-cc-bots/grok && grok --no-alt-screen",
+                "grok",
+            ),
             ("-fish", "shell"),
             ("-bash", "shell"),
             ("bash ./scripts/restart.sh run", "shell"),
@@ -73,6 +78,11 @@ PS_OUTPUT_CODEX = (
 )
 
 PS_OUTPUT_SHELL_ONLY = " 5000  5000 Ss+  -bash\n"
+
+PS_OUTPUT_GROK_SHELL_WRAPPER = (
+    " 9938  9938 Ss+  bash -c cd /repo && grok --no-alt-screen\n"
+    " 9939  9938 S+   grok --no-alt-screen\n"
+)
 
 PS_OUTPUT_NO_LEADER = " 9000  9000 Ss   -fish\n 9100  9050 S+   node /some/script.js\n"
 
@@ -167,6 +177,19 @@ class TestDetectProviderFromTty:
             result = await detect_provider_from_tty("/dev/ttys005")
 
         assert result == "shell"
+
+    async def test_detects_grok_from_shell_wrapper(self) -> None:
+        mock_proc = AsyncMock()
+        mock_proc.returncode = 0
+        mock_proc.communicate.return_value = (
+            PS_OUTPUT_GROK_SHELL_WRAPPER.encode(),
+            b"",
+        )
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+            result = await detect_provider_from_tty("/dev/ttys012")
+
+        assert result == "grok"
 
 
 class TestDetectProviderCached:
